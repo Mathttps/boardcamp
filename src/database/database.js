@@ -9,9 +9,6 @@ const configDatabase = {
   connectionString: process.env.DATABASE_URL,
 };
 
-try {
-  export const db = await new Pool(configDatabase);
-} catch (err) {
-  console.error("Error connecting to database:", err);
-  process.exit(1);
-}
+if(process.env.MODE === "prod") configDatabase.ssl = true;
+
+export const db = new Pool(configDatabase);
