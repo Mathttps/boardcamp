@@ -10,9 +10,17 @@ async function executeQuery(query, values = []) {
     }
 }
 
+function isValidDateFormat(date) {
+    return dayjs(date, { strict: true }).isValid();
+}
+
 export async function createRental(req, res) {
     const { customerId, gameId, daysRented } = req.body;
     const rentDate = dayjs().format("YYYY-MM-DD");
+
+    if (!isValidDateFormat(rentDate)) {
+        return res.status(400).send("A data de aluguel deve estar no formato YYYY-MM-DD.");
+    }
 
     try {
         await db.query('BEGIN');
