@@ -12,27 +12,22 @@ async function executeQuery(query, values = []) {
 
 export async function createRental(req, res) {
     const { customerId, gameId, daysRented } = req.body;
-    const rentDate = dayjs(Date.now()).format("YYYY-MM-DD");
-
-    if (daysRented <= 0) {
-        return res.status(400).send('daysRented must be a number greater than 0');
-    }
+    const rentDate = dayjs().format("YYYY-MM-DD");
 
     try {
         await db.query('BEGIN');
 
         const userExists = await executeQuery('SELECT 1 FROM customers WHERE id=$1;', [customerId]);
-        if (!userExists.length) {
-            return res.sendStatus(400);
-        }
-
         const gameExists = await executeQuery('SELECT 1 FROM games WHERE id=$1;', [gameId]);
-        if (!gameExists.length) {
+
+        if (!userExists.length || !gameExists.length) {
             return res.sendStatus(400);
         }
 
-        const currentRents = await executeQuery('SELECT 1 FROM rentals WHERE "gameId"=$1 FOR UPDATE;', [gameId]);
-        if (currentRents.length >= gameExists[0].stockTotal) {
+        const currentRents = await executeQuery('SELECT COUNT(*) FROM rentals WHERE "gameId"=$1;', [gameId]);
+        const stockTotal = gameExists[0].stockTotal;
+
+        if (currentRents[0].count >= stockTotal) {
             return res.sendStatus(400);
         }
 
@@ -41,7 +36,8 @@ export async function createRental(req, res) {
         await executeQuery(`
             INSERT INTO rentals
             ("customerId", "gameId", "rentDate", "daysRented", "returnDate", "originalPrice", "delayFee")
-            VALUES ($1, $2, $3, $4, null, $5, null);
+            VALUES ($1, $2, $3, $4, null, $5, null)
+            RETURNING *;
         `, [customerId, gameId, rentDate, daysRented, originalPrice]);
 
         await db.query('COMMIT');
