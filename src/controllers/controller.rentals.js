@@ -1,76 +1,45 @@
-import dayjs from "dayjs";
 import { db } from "../database/database.connection.js";
+import dayjs from "dayjs";
 
-async function executeQuery(query, values = []) {
+async function handleDbQuery(query, values = []) {
     try {
         const result = await db.query(query, values);
         return result.rows;
-    } catch (error) {
-        throw new Error(error.message);
+    } catch (err) {
+        throw new Error(err.message);
     }
 }
 
-export async function createRental(req, res) {
-    const { customerId, gameId, daysRented } = req.body;
-    const rentDate = dayjs(Date.now()).format("YYYY-MM-DD");
-
-    if (daysRented <= 0) {
-        return res.status(400).send('daysRented must be a number greater than 0');
-    }
+export async function createCustomers(req, res) {
+    const { name, phone, cpf, birthday } = req.body;
 
     try {
-        await db.query('BEGIN');
+        const verification = await handleDbQuery("SELECT * FROM customers WHERE cpf = $1;", [cpf]);
 
-        const userExists = await executeQuery('SELECT 1 FROM customers WHERE id=$1;', [customerId]);
-        const gameExists = await executeQuery('SELECT 1 FROM games WHERE id=$1;', [gameId]);
-
-        if (!userExists.length || !gameExists.length) {
-            return res.sendStatus(400);
+        if (verification[0]) {
+            return res.sendStatus(409);
         }
 
-        const currentRents = await executeQuery('SELECT 1 FROM rentals WHERE "gameId"=$1 FOR UPDATE;', [gameId]);
-
-        if (currentRents.length >= gameExists[0].stockTotal) {
-            return res.sendStatus(400);
-        }
-
-        const originalPrice = daysRented * gameExists[0].pricePerDay;
-
-        await executeQuery(`
-            INSERT INTO rentals
-            ("customerId", "gameId", "rentDate", "daysRented", "returnDate", "originalPrice", "delayFee")
-            VALUES ($1, $2, $3, $4, null, $5, null);
-        `, [customerId, gameId, rentDate, daysRented, originalPrice]);
-
-        await db.query('COMMIT');
+        await handleDbQuery("INSERT INTO customers (name, phone, cpf, birthday) VALUES ($1, $2, $3, $4);", [name, phone, cpf, birthday]);
 
         res.sendStatus(201);
-    } catch (error) {
-        await db.query('ROLLBACK');
-        res.status(500).send(error.message);
+    } catch (err) {
+        res.status(500).send(err.message);
     }
 }
 
-export async function returnRental(req, res) {
+export async function putUsers(req, res) {
+    const { name, phone, cpf, birthday } = req.body;
     const { id } = req.params;
-    const date = dayjs(Date.now()).format('YYYY-MM-DD');
 
     try {
-        const rent = await db.query(`SELECT * FROM rentals WHERE id=$1`, [id]);
+        const verification = await handleDbQuery("SELECT * FROM customers WHERE cpf = $1 AND id <> $2;", [cpf, id]);
 
-        if (!rent.rows[0] || rent.rows[0].returnDate) {
-            return res.sendStatus(!rent.rows[0] ? 404 : 400);
+        if (verification[0]) {
+            return res.sendStatus(409);
         }
 
-        const game = await db.query(`SELECT * FROM games WHERE id=$1`, [rent.rows[0].gameId]);
-        const delay = Math.max(dayjs(date).diff(rent.rows[0].rentDate, 'day') - rent.rows[0].daysRented, 0);
-        const value = delay * game.rows[0].pricePerDay;
-
-        await db.query(`
-            UPDATE rentals
-            SET "returnDate" = $1, "delayFee" = $2
-            WHERE id = $3;
-        `, [date, value, id]);
+        await handleDbQuery("UPDATE customers SET name=$1, phone=$2, cpf=$3, birthday=$4 WHERE id = $5;", [name, phone, cpf, birthday, id]);
 
         res.sendStatus(200);
     } catch (err) {
@@ -78,53 +47,28 @@ export async function returnRental(req, res) {
     }
 }
 
-export async function deleteRental(req, res) {
+export async function getCustomerById(req, res) {
     const { id } = req.params;
 
     try {
-        const rent = await db.query(`SELECT * FROM rentals WHERE id=$1`, [id]);
+        const users = await handleDbQuery("SELECT * FROM customers WHERE id=$1;", [id]);
 
-        if (!rent.rows[0] || !rent.rows[0].returnDate) {
-            return res.sendStatus(!rent.rows[0] ? 404 : 400);
+        if (!users[0]) {
+            return res.sendStatus(404);
         }
 
-        await db.query(`DELETE FROM rentals WHERE id=$1`, [id]);
-
-        res.sendStatus(200);
+        const user = users[0];
+        res.send({ ...user, birthday: dayjs(user.birthday).format("YYYY-MM-DD") });
     } catch (err) {
         res.status(500).send(err.message);
     }
 }
 
-export async function getRental(req, res) {
+export async function getUsers(req, res) {
     try {
-        const rentals = await db.query(`
-            SELECT rentals.*, customers.name AS customer_name, games.name AS game_name
-            FROM rentals
-            JOIN customers ON customers.id = "customerId"
-            JOIN games ON games.id = "gameId";
-        `);
+        const users = await handleDbQuery("SELECT * FROM customers;");
 
-        const list = rentals.rows.map((data) => ({
-            id: data.id,
-            customerId: data.customerId,
-            gameId: data.gameId,
-            rentDate: dayjs(data.rentDate).format('YYYY-MM-DD'),
-            daysRented: data.daysRented,
-            returnDate: data.returnDate,
-            originalPrice: data.originalPrice,
-            delayFee: data.delayFee,
-            customer: {
-                id: data.customerId,
-                name: data.customer_name
-            },
-            game: {
-                id: data.gameId,
-                name: data.game_name
-            }
-        }));
-
-        res.send(list);
+        res.send(users.map(user => ({ ...user, birthday: dayjs(user.birthday).format("YYYY-MM-DD") })));
     } catch (err) {
         res.status(500).send(err.message);
     }

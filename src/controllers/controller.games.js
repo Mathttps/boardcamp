@@ -4,16 +4,16 @@ export async function createGame(req, res) {
     const { name, image, stockTotal, pricePerDay } = req.body;
 
     try {
-        const result = await db.query(`
-            INSERT INTO games (name, image, "stockTotal", "pricePerDay")
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (name) DO NOTHING
-            RETURNING *;
-        `, [name, image, stockTotal, pricePerDay]);
+        const existingGameCount = await db.query(`SELECT COUNT(*) FROM games WHERE name = $1;`, [name]);
 
-        if (result.rows.length === 0) {
-            return res.sendStatus(409); // Já existe um jogo com esse nome
+        if (existingGameCount.rows[0].count > 0) {
+            return res.sendStatus(409);
         }
+
+        await db.query(`
+            INSERT INTO games (name, image, "stockTotal", "pricePerDay")
+            VALUES ($1, $2, $3, $4);
+        `, [name, image, stockTotal, pricePerDay]);
 
         res.sendStatus(201);
     } catch (err) {
