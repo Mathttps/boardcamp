@@ -18,9 +18,20 @@ export async function createRental(req, res) {
         await db.query('BEGIN');
 
         const userExists = await executeQuery('SELECT 1 FROM customers WHERE id=$1;', [customerId]);
-        const gameExists = await executeQuery('SELECT 1 FROM games WHERE id=$1;', [gameId]);
+        if (!userExists.length) {
+            await db.query('ROLLBACK');
+            return res.sendStatus(400);
+        }
 
-        if (!userExists.length || !gameExists.length) {
+
+        const gameExists = await executeQuery('SELECT 1 FROM games WHERE id=$1;', [gameId]);
+        if (!gameExists.length) {
+            await db.query('ROLLBACK');
+            return res.sendStatus(400);
+        }
+
+        if (daysRented <= 0) {
+            await db.query('ROLLBACK');
             return res.sendStatus(400);
         }
 
@@ -28,12 +39,14 @@ export async function createRental(req, res) {
         const stockTotal = gameExists[0].stockTotal;
 
         if (currentRents[0].count >= stockTotal) {
+            await db.query('ROLLBACK');
             return res.sendStatus(400);
         }
 
         const originalPrice = daysRented * gameExists[0].pricePerDay;
 
-        await executeQuery(`
+
+        const result = await executeQuery(`
             INSERT INTO rentals
             ("customerId", "gameId", "rentDate", "daysRented", "returnDate", "originalPrice", "delayFee")
             VALUES ($1, $2, $3, $4, null, $5, null)
