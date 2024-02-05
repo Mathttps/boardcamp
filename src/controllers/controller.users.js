@@ -10,13 +10,6 @@ async function handleDbQuery(query, values = []) {
     }
 }
 
-async function formatDateFields(data) {
-    return {
-        ...data,
-        birthday: dayjs(data.birthday).format("YYYY-MM-DD"),
-    };
-}
-
 export async function createCustumers(req, res) {
     const { name, phone, cpf, birthday } = req.body;
 
@@ -64,8 +57,8 @@ export async function getCustomerById(req, res) {
             return res.sendStatus(404);
         }
 
-        const user = await formatDateFields(users[0]);
-        res.send(user);
+        const user = users[0];
+        res.send({ ...user, birthday: dayjs(user.birthday).format("YYYY-MM-DD") });
     } catch (err) {
         res.status(500).send(err.message);
     }
@@ -75,8 +68,7 @@ export async function getUsers(req, res) {
     try {
         const users = await handleDbQuery("SELECT * FROM customers;");
 
-        const formattedUsers = await Promise.all(users.map(formatDateFields));
-        res.send(formattedUsers);
+        res.send(users.map(user => ({ ...user, birthday: dayjs(user.birthday).format("YYYY-MM-DD") })));
     } catch (err) {
         res.status(500).send(err.message);
     }

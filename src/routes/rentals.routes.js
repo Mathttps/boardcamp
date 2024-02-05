@@ -3,10 +3,13 @@ import { deleteRental, getRental, createRental, returnRental } from "../controll
 
 const rentalsRouter = Router()
 
-rentalsRouter.get('/rentals', getRental)
 rentalsRouter.post('/rentals', createRental)
-rentalsRouter.delete('/rentals/:id', deleteRental)
+
 rentalsRouter.post('/rentals/:id/return', returnRental)
+
+rentalsRouter.delete('/rentals/:id', deleteRental)
+
+rentalsRouter.get('/rentals', getRental)
 
 export default rentalsRouter
 
